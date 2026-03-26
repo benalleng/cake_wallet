@@ -29,6 +29,7 @@ import 'package:cw_core/utils/print_verbose.dart';
 import 'package:cw_core/wallet_info.dart';
 import 'package:cw_core/wallet_type.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:mobx/mobx.dart';
 import 'package:cake_wallet/view_model/send/send_view_model.dart';
@@ -619,6 +620,16 @@ class SendCardState extends State<SendCard> with AutomaticKeepAliveClientMixin<S
                   onPushPasteButton: (context) async {
                     _justHandledPasteButton = true;
                     try {
+                      // Read the raw clipboard to check if it was a URI.
+                      // If it contains '=', the AddressTextField already
+                      // handled it via onURIScanned (which correctly parses
+                      // BIP21 params like pj= for payjoin). Skip re-processing
+                      // to avoid overwriting payjoinUri with null.
+                      final clipboard =
+                          await Clipboard.getData('text/plain');
+                      final clipboardText = clipboard?.text ?? '';
+                      if (clipboardText.contains('=')) return;
+
                       output.resetParsedAddress();
                       await output.fetchParsedAddress(context);
 
@@ -1072,9 +1083,7 @@ class SendCardState extends State<SendCard> with AutomaticKeepAliveClientMixin<S
 
     if (initialPaymentRequest != null &&
         sendViewModel.walletCurrencyName == initialPaymentRequest!.scheme.toLowerCase()) {
-      addressController.text = initialPaymentRequest!.address;
-      cryptoAmountController.text = initialPaymentRequest!.amount;
-      noteController.text = initialPaymentRequest!.note;
+      _applyPaymentRequest(initialPaymentRequest!);
     }
 
     reaction((_) => sendViewModel.isReadyForSend, (bool isReadyForSend) {
